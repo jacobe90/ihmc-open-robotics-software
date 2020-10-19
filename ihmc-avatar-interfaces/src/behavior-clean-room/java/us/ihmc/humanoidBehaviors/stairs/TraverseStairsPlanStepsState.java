@@ -62,8 +62,16 @@ public class TraverseStairsPlanStepsState implements State
       planningModule.getSwingPlannerParameters().load(swingParameterFileName);
 
       footstepListPublisher = new IHMCROS2Publisher<>(helper.getManagedROS2Node(), TraverseStairsBehaviorAPI.PLANNED_STEPS);
-      new IHMCROS2Callback<>(helper.getManagedROS2Node(), TraverseStairsBehaviorAPI.EXECUTE_STEPS, r -> executeStepsSignaled.set(true));
-      new IHMCROS2Callback<>(helper.getManagedROS2Node(), TraverseStairsBehaviorAPI.REPLAN, r -> planSteps.set(true));
+      new IHMCROS2Callback<>(helper.getManagedROS2Node(), TraverseStairsBehaviorAPI.EXECUTE_STEPS, r ->
+      {
+         LogTools.info("Execute steps requested");
+         executeStepsSignaled.set(true);
+      });
+      new IHMCROS2Callback<>(helper.getManagedROS2Node(), TraverseStairsBehaviorAPI.REPLAN, r ->
+      {
+         LogTools.info("Replan steps requested");
+         planSteps.set(true);
+      });
    }
 
    @Override

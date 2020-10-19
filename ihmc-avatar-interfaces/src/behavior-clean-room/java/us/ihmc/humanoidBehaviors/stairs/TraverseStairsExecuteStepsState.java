@@ -11,6 +11,7 @@ import us.ihmc.humanoidBehaviors.tools.BehaviorHelper;
 import us.ihmc.humanoidBehaviors.tools.RemoteHumanoidRobotInterface;
 import us.ihmc.humanoidRobotics.communication.packets.walking.FootstepStatus;
 import us.ihmc.humanoidRobotics.communication.packets.walking.WalkingStatus;
+import us.ihmc.log.LogTools;
 import us.ihmc.robotics.stateMachine.core.State;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -35,9 +36,17 @@ public class TraverseStairsExecuteStepsState implements State
 
       helper.createROS2ControllerCallback(WalkingStatusMessage.class, message ->
       {
+         LogTools.info("Received WalkingStatusMessage: " + WalkingStatus.fromByte(message.getWalkingStatus()));
+
          if (message.getWalkingStatus() == WalkingStatus.COMPLETED.toByte())
          {
             walkingComplete.set(true);
+         }
+         else if (message.getWalkingStatus() == WalkingStatus.ABORT_REQUESTED.toByte())
+         {
+            FootstepPlan footstepPlan = footstepPlannerOutput.get().getFootstepPlan();
+            FootstepDataListMessage footstepDataListMessage = FootstepDataMessageConverter.createFootstepDataListFromPlan(footstepPlan, -1.0, -1.0);
+            robotInterface.requestWalk(footstepDataListMessage);
          }
       });
    }

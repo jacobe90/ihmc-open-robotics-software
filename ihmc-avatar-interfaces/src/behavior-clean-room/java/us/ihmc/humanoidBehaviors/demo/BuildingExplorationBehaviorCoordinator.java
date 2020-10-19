@@ -230,6 +230,8 @@ public class BuildingExplorationBehaviorCoordinator
    {
       if (stopRequested.getAndSet(false))
       {
+         LogTools.info("Stop requested. Sending abort walking message");
+
          requestState(BuildingExplorationStateName.TELEOP);
          stateMachine.doActionAndTransition();
          abortWalkingPublisher.publish(new AbortWalkingMessage());
