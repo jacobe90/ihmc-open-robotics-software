@@ -45,6 +45,9 @@ public class TraverseStairsPlanStepsState implements State
    private final AtomicBoolean executeStepsSignaled = new AtomicBoolean();
    private final AtomicBoolean planSteps = new AtomicBoolean();
 
+   private static final int printFrequency = 50;
+   private int printCounter = 0;
+
    public TraverseStairsPlanStepsState(BehaviorHelper helper, TraverseStairsBehaviorParameters parameters)
    {
       this.helper = helper;
@@ -92,6 +95,8 @@ public class TraverseStairsPlanStepsState implements State
          LogTools.info(message);
          throw new RuntimeException(message);
       }
+
+      printCounter = 0;
    }
 
    @Override
@@ -100,6 +105,11 @@ public class TraverseStairsPlanStepsState implements State
       if (planSteps.getAndSet(false))
       {
          planSteps();
+      }
+
+      if (printCounter++ > printFrequency)
+      {
+         LogTools.info("In PlanStepsState. Output: " + output.getFootstepPlanningResult() + ". Steps: " + output.getFootstepPlan().getNumberOfSteps());
       }
    }
 

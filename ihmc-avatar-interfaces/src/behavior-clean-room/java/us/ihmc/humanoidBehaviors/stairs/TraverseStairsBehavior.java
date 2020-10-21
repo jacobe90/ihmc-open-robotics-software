@@ -22,7 +22,6 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static us.ihmc.humanoidBehaviors.stairs.TraverseStairsBehaviorAPI.Enabled;
 import static us.ihmc.humanoidBehaviors.stairs.TraverseStairsBehaviorAPI.create;
 
 public class TraverseStairsBehavior implements BehaviorInterface
@@ -120,7 +119,7 @@ public class TraverseStairsBehavior implements BehaviorInterface
          }
 
          planStepsState.reset();
-         executeStepsState.clearWalkingCompleteFlag();
+         executeStepsState.clearStatusFlags();
 
          hasPublishedCompleted.set(false);
          behaviorHasCrashed.set(false);

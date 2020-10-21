@@ -1,21 +1,19 @@
 package us.ihmc.humanoidBehaviors.stairs;
 
 import controller_msgs.msg.dds.FootstepDataListMessage;
-import controller_msgs.msg.dds.FootstepStatusMessage;
 import controller_msgs.msg.dds.WalkingStatusMessage;
+import us.ihmc.communication.IHMCROS2Callback;
 import us.ihmc.footstepPlanning.FootstepDataMessageConverter;
 import us.ihmc.footstepPlanning.FootstepPlan;
 import us.ihmc.footstepPlanning.FootstepPlannerOutput;
 import us.ihmc.footstepPlanning.FootstepPlanningResult;
 import us.ihmc.humanoidBehaviors.tools.BehaviorHelper;
 import us.ihmc.humanoidBehaviors.tools.RemoteHumanoidRobotInterface;
-import us.ihmc.humanoidRobotics.communication.packets.walking.FootstepStatus;
 import us.ihmc.humanoidRobotics.communication.packets.walking.WalkingStatus;
 import us.ihmc.log.LogTools;
 import us.ihmc.robotics.stateMachine.core.State;
 
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 public class TraverseStairsExecuteStepsState implements State
@@ -25,7 +23,9 @@ public class TraverseStairsExecuteStepsState implements State
    private final Supplier<FootstepPlannerOutput> footstepPlannerOutput;
    private final RemoteHumanoidRobotInterface robotInterface;
 
+   private final AtomicBoolean isWalking = new AtomicBoolean();
    private final AtomicBoolean walkingComplete = new AtomicBoolean();
+   private final AtomicBoolean rebroadcastSteps = new AtomicBoolean();
 
    public TraverseStairsExecuteStepsState(BehaviorHelper helper, TraverseStairsBehaviorParameters parameters, Supplier<FootstepPlannerOutput> footstepPlannerOutput)
    {
@@ -37,6 +37,7 @@ public class TraverseStairsExecuteStepsState implements State
       helper.createROS2ControllerCallback(WalkingStatusMessage.class, message ->
       {
          LogTools.info("Received WalkingStatusMessage: " + WalkingStatus.fromByte(message.getWalkingStatus()));
+         isWalking.set(message.getWalkingStatus() == WalkingStatus.STARTED.toByte());
 
          if (message.getWalkingStatus() == WalkingStatus.COMPLETED.toByte())
          {
@@ -49,13 +50,23 @@ public class TraverseStairsExecuteStepsState implements State
             robotInterface.requestWalk(footstepDataListMessage);
          }
       });
+
+      new IHMCROS2Callback<>(helper.getManagedROS2Node(), TraverseStairsBehaviorAPI.EXECUTE_STEPS, r ->
+      {
+         LogTools.info("Execute steps requested");
+         rebroadcastSteps.set(true);
+      });
    }
 
    @Override
    public void onEntry()
    {
-      clearWalkingCompleteFlag();
+      clearStatusFlags();
+      sendPlan();
+   }
 
+   private void sendPlan()
+   {
       FootstepPlannerOutput footstepPlannerOutput = this.footstepPlannerOutput.get();
       if (footstepPlannerOutput == null)
       {
@@ -64,19 +75,23 @@ public class TraverseStairsExecuteStepsState implements State
 
       FootstepPlan footstepPlan = footstepPlannerOutput.getFootstepPlan();
       FootstepDataListMessage footstepDataListMessage = FootstepDataMessageConverter.createFootstepDataListFromPlan(footstepPlan, -1.0, -1.0);
+      LogTools.info("Requesting walk");
       robotInterface.requestWalk(footstepDataListMessage);
    }
 
    @Override
    public void doAction(double timeInState)
    {
-
+      if (rebroadcastSteps.getAndSet(false) && !isWalking.get())
+      {
+         sendPlan();
+      }
    }
 
    @Override
    public void onExit(double timeInState)
    {
-      clearWalkingCompleteFlag();
+      clearStatusFlags();
    }
 
    @Override
@@ -85,9 +100,11 @@ public class TraverseStairsExecuteStepsState implements State
       return walkingIsComplete() && !planEndsAtGoal();
    }
 
-   public void clearWalkingCompleteFlag()
+   public void clearStatusFlags()
    {
+      isWalking.set(false);
       walkingComplete.set(false);
+      rebroadcastSteps.set(false);
    }
 
    boolean planEndsAtGoal()
