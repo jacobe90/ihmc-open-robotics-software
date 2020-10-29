@@ -3,6 +3,9 @@ package us.ihmc.humanoidBehaviors.demo;
 import controller_msgs.msg.dds.*;
 import std_msgs.msg.dds.Empty;
 import us.ihmc.commons.Conversions;
+import us.ihmc.commons.exception.DefaultExceptionHandler;
+import us.ihmc.commons.exception.ExceptionTools;
+import us.ihmc.commons.thread.Notification;
 import us.ihmc.commons.thread.ThreadTools;
 import us.ihmc.communication.IHMCROS2Publisher;
 import us.ihmc.communication.ROS2Tools;
@@ -91,14 +94,7 @@ public class BuildingExplorationBehaviorCoordinator
                                            getClass().getSimpleName(),
                                            UPDATE_RATE_MILLIS);
 
-      try
-      {
-         kryoMessager.startMessager();
-      }
-      catch (Exception e)
-      {
-         throw new RuntimeException(e);
-      }
+      ThreadTools.startAsDaemon(() -> ExceptionTools.handle(kryoMessager::startMessager, DefaultExceptionHandler.RUNTIME_EXCEPTION), "KryoConnect");
 
       teleopState = new TeleopState();
       lookAndStepState = new LookAndStepState(robotName, ros2Node, kryoMessager, bombPosition);
@@ -335,6 +331,9 @@ public class BuildingExplorationBehaviorCoordinator
       private Runnable debrisDetectedCallback = () -> {};
       private Runnable stairsDetectedCallback = () -> {};
 
+      private Notification bodyPathPlanningStateReached = new Notification();
+      private LookAndStepBehavior.State currentState = LookAndStepBehavior.State.RESET;
+
       public LookAndStepState(String robotName, ROS2Node ros2Node, KryoMessager messager, Point3DReadOnly bombPosition)
       {
          this.messager = messager;
@@ -362,6 +361,14 @@ public class BuildingExplorationBehaviorCoordinator
                stepCounter.incrementAndGet();
             }
          });
+         messager.registerTopicListener(LookAndStepBehaviorAPI.CurrentState, state ->
+         {
+            currentState = LookAndStepBehavior.State.valueOf(state);
+            if (currentState.equals(LookAndStepBehavior.State.BODY_PATH_PLANNING))
+            {
+               bodyPathPlanningStateReached.set();
+            }
+         });
       }
 
       @Override
@@ -372,6 +379,14 @@ public class BuildingExplorationBehaviorCoordinator
          String behaviorName = LookAndStepBehavior.DEFINITION.getName();
          messager.submitMessage(BehaviorModule.API.BehaviorSelection, behaviorName);
          ThreadTools.sleep(100);
+
+         if (!currentState.equals(LookAndStepBehavior.State.BODY_PATH_PLANNING))
+         {
+            LogTools.info("Waiting for BODY_PATH_PLANNING state...");
+            bodyPathPlanningStateReached.poll(); // clear it to wait for another one
+            bodyPathPlanningStateReached.blockingPoll();
+         }
+         LogTools.info("Look and step is in BODY_PATH_PLANNING state. Proceeding...");
 
          messager.submitMessage(LookAndStepBehaviorAPI.OperatorReviewEnabled, false);
          ThreadTools.sleep(100);
